@@ -29,3 +29,7 @@ test('Resume restores server history and invalid operations are refused',async()
   assert.throws(()=>runtime.requireHost(),/Connect/);
 });
 test('Missing binary fails cleanly',async()=>{const runtime=new MuseRuntime(()=>{});await assert.rejects(()=>runtime.connect('nonexistent-muse-fixture-12345'),/ENOENT|spawn|EPIPE/);assert.ok(!runtime.host);});
+test('Closing during startup shuts down the owned host and rejects the unfinished handshake',async()=>{
+  const runtime=new MuseRuntime(()=>{});const connecting=runtime.connect(process.execPath,process.cwd(),[fixture],{...process.env,MUSECODE_FIXTURE_STALL_INITIALIZE:'1'});
+  const refused=assert.rejects(connecting);await until(()=>!!runtime.starting);await runtime.disconnect();await refused;assert.ok(!runtime.host);assert.ok(!runtime.starting);
+});

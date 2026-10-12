@@ -1,6 +1,6 @@
 {
   "name": "musecode-desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "An open source desktop home for Meta Muse Code.",
@@ -11,7 +11,8 @@
     "build": "vite build",
     "start": "npm run build && electron .",
     "test": "node --test tests/*.test.mjs",
-    "test:desktop": "npm run build && node --test tests/desktop.e2e.mjs",
+    "test:desktop": "npm run build && node --test --test-concurrency=1 tests/desktop.e2e.mjs tests/onboarding.e2e.mjs",
+    "test:native": "node tests/native-smoke.mjs",
     "check": "tsc --noEmit",
     "package": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder"

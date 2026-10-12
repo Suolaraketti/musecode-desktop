@@ -6,7 +6,8 @@ export type Question = {userInputId:string;questions:{id:string;question:string;
 export type Snapshot = {sessionId:string;row?:Row;items:Item[];approvals:Approval[];questions:Question[]};
 export type FileEntry = {name:string;path:string;directory:boolean};
 export type Change = {path:string;status:string};
-export type Model = {modelId:string;displayLabel:string;providerId:string;description?:string};
+export type Model = {modelId:string;displayLabel:string;providerId:string;description?:string;isDefault?:boolean};
+export type SetupState = {phase:'checking'|'welcome'|'preparing'|'connecting'|'waiting'|'ready'|'error';message:string;userCode?:string;verificationUrl?:string;account?:{state:string;label?:string}};
 // Renderer only sees this narrow preload API. It cannot import Node or spawn processes.
 export type Bridge = Record<string,(...args:any[])=>Promise<any>> & {onEvent:(handler:(event:any)=>void)=>()=>void};
 declare global { interface Window { muse?:Bridge } }

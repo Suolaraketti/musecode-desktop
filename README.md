@@ -2,15 +2,15 @@
 
 A comfortable, open source desktop home for Meta's Muse Code agent. An independent community project; not affiliated with or endorsed by Meta.
 
-![MuseCode workspace](screenshots/welcome.png)
+![MuseCode first run](screenshots/onboarding.png)
 
 MuseCode takes the approach used in the local Grok Build desktop app: put a GUI around the real agent runtime. It uses Meta's official `@muse-code/sdk` and `muse serve`, rather than reimplementing the coding loop or calling a model as a basic chatbot. The UI is newly written; no Grok source, branding, credentials, or agent binary is redistributed.
 
 ## Run the Windows build
 
-Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.1.0-alpha.1). It is an unsigned development alpha; live Muse/Wonder sessions still need validation.
+Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.2.0-alpha.1). It is an unsigned development alpha; live Muse/Wonder sessions still need validation.
 
-For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.1.0.exe`.
+For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.2.0.exe`.
 
 To run from source, install Node.js 22 or newer:
 
@@ -27,21 +27,27 @@ For a frontend-only preview:
 npm run dev
 ```
 
-Then open `http://127.0.0.1:5173`. Browser preview has no filesystem or process access. Use Settings → Explore the interface for a clearly labeled, offline sample conversation.
+Then open `http://127.0.0.1:5173`. Browser preview has no filesystem or process access. Use Take a look around for a clearly labeled, offline sample conversation.
 
-## Connect Meta Muse Code
+## Get started
 
-1. Install the official Muse Code CLI using [Meta's instructions](https://dev.meta.ai/docs/muse-code).
-2. Start `muse` once to sign in with your Meta account and configure your native permission policy. The GUI shares the CLI's environment, configuration, and authentication. MuseCode does not collect API keys.
-3. In MuseCode, open Settings. Select the native `muse` executable on macOS/Linux, or `muse-bin-<version>.exe` on Windows. Shell launchers such as `.cmd` and `.ps1` are not supported.
-4. Connect the agent and open a project folder.
-5. Send a prompt. The model selector uses the agent's actual model catalog; Wonder and Wonder Full appear only when your connected runtime/account exposes them. No model identifiers or subscription entitlements are guessed.
+1. Download and open MuseCode on Windows.
+2. Click **Sign in with Meta**. MuseCode detects an existing Muse runtime or downloads the official runtime into its private app-data directory automatically. No separate terminal, PATH editing, or executable picker is required.
+3. Complete Meta's sign-in in your browser and confirm the displayed code. The app returns to your workspace when the native host confirms the account.
+4. Open your project and start a conversation. Available models are loaded from your actual Muse account before the first prompt; Wonder/Full appear when offered by the runtime.
 
-The CLI installer may have access restrictions. Those are controlled by Meta; MuseCode does not bypass them. Native binaries can also be selected from an existing CLI installation.
+Returning users reconnect automatically. MuseCode restores the last project, native conversation, and unsent draft. A second app launch focuses the existing window. Connection failures trigger bounded reconnect attempts without resubmitting prompts. Expired or denied sign-ins show a recovery action.
+
+Runtime update checks run once per day in the background for app-managed installations; a downloaded update is used on the next connection. The main interface contains account and appearance settings. Custom executable selection is available under **Settings → Advanced connection settings** for developers.
+
+Automatic installation currently targets Windows. Existing native Muse installations can be connected on other platforms through Advanced settings. Meta controls account access, runtime download availability, and model entitlement. The runtime is downloaded from Meta and is not redistributed in our installer.
+
+Account status and browser sign-in use the host-owned experimental MSP `account/*` methods negotiated at initialization. Muse owns credential storage, OAuth polling, cancellation and refresh. The GUI never receives access or refresh tokens, and does not fabricate a successful login from a transport connection.
 
 ## Implemented in this alpha
 
-- Project picker, recent projects, saved native sessions, new conversations, and session resume.
+- Guided first run, automatic Windows runtime setup, native Meta browser sign-in, background runtime updates, and recovery.
+- Project picker, recent projects, saved native sessions, new conversations, session resume, and last-workspace/draft restoration.
 - Streamed Markdown conversations, tool calls, reasoning, subagent/workflow items, and generic rendering for additional item kinds.
 - Follow-up steering while running; Alt+Enter queues the prompt; stop sends native cancellation.
 - Model selection from `model/list` and reasoning effort on each submitted turn.
@@ -58,11 +64,11 @@ Native permissions and sandbox settings remain owned by Muse Code. No permissive
 
 ## Remaining work before a public release
 
-This is a working foundation, not yet full TUI parity or a production release. Live Meta authentication/model runs have not been validated on this machine because the Muse CLI was not installed. Transport integration is tested against a deterministic MSP fixture, not a real Wonder model.
+This is a working foundation, not yet full TUI parity or a production release. Fresh runtime installation and native initialization, account status, and browser-login start/cancel were validated with Muse 1.4.6. Completed account authorization and live Wonder coding still need testing with a user account. Automated desktop tests use a deterministic MSP host for completed login and coding interactions.
 
 | Surface | Current state | Next work |
 | --- | --- | --- |
-| Authentication | Reuses CLI sign-in | GUI onboarding and installation detection improvements |
+| Authentication | Automatic setup and native browser sign-in | Complete user-account authorization and live Wonder validation |
 | Models | Native catalog and session switch | Validate Wonder/Full entitlement and effort variants live |
 | Agent activity | Renders native items | Rich workflow timelines and subagent controls |
 | Files/Git | Read-only previews and diffs | Editor, staged review/commit flow, worktrees |
@@ -98,13 +104,14 @@ Read-only project operations resolve real paths and reject traversal/symlink esc
 ```sh
 npm run check         # TypeScript renderer
 npm test              # MSP transport, approval, resume, files and Git tests
-npm run test:desktop  # Build and run real Electron UI acceptance test
+npm run test:desktop  # Build and run two Electron UI acceptance tests
+npm run test:native -- /path/to/muse # Opt-in native handshake/login start-cancel (no model call)
 npm run package       # Unpacked desktop build for the host OS
 npm run dist          # Installer (signing must be configured for release)
 npm audit
 ```
 
-The desktop test launches a hidden window and uses an isolated temporary app profile/project. It verifies onboarding, preview labels, themes, command palette, native picker/IPC, file previews, Git diffs, and missing-binary errors. It generates reference screenshots. macOS/Linux builds and authenticated Muse sessions still need independent validation.
+The desktop tests launch hidden windows and use isolated temporary profiles/projects. They verify onboarding, native sign-in rendering, approvals, project selection, session/draft restoration, preview labels, themes, command palette, file/Git IPC, and advanced-setting errors. Completed authorization is simulated by the test host. Reference screenshots are generated by source tests; macOS/Linux builds and live Wonder sessions still need independent validation.
 
 For frontend hot reload, run `npm run dev`, then launch Electron with `MUSECODE_DEV_URL=http://127.0.0.1:5173`. Only that exact loopback development URL is accepted.
 

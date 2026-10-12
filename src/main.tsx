@@ -3,8 +3,10 @@ import { createRoot } from 'react-dom/client';
 import { ArrowUp, ArrowDownToLine, ArrowLeft, Check, ChevronDown, ChevronRight, Circle, CircleHelp, Code2, Command, Copy, FileCode2, Files, Folder, FolderOpen, GitBranch, GitFork, GitPullRequest, Globe, Layers, ListChecks, Loader2, Maximize2, MessageSquare, Minus, PanelRightClose, PanelRightOpen, Plus, Search, Settings2, ShieldCheck, Sparkles, Square, Terminal, WandSparkles, X, Zap } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { Approval, Bridge, Change, FileEntry, Item, Model, Question, Row, Snapshot } from './types';
+import type { Approval, Bridge, Change, FileEntry, Item, Model, Question, Row, Snapshot, SetupState } from './types';
 import { demoSnapshot } from './demo';
+import { Onboarding } from './Onboarding';
+import { Settings } from './Settings';
 import './style.css';
 
 const bridge=window.muse;
@@ -26,6 +28,8 @@ function App(){
   const [inventory,setInventory]=useState<any>(null),[events,setEvents]=useState<any[]>([]),[shellText,setShellText]=useState('');
   const [creating,setCreating]=useState(false),[usage,setUsage]=useState<any>(null),[plan,setPlan]=useState<any>(null);
   const [rename,setRename]=useState(false),[renameText,setRenameText]=useState('');
+  const [setupState,setSetupState]=useState<SetupState>({phase:'checking',message:'Getting your workspace ready…'});
+  const preferences=useRef<any>({}),booted=useRef(false),hydrating=useRef(false),previousPhase=useRef('checking');
   const bottom=useRef<HTMLDivElement>(null),composer=useRef<HTMLTextAreaElement>(null);
   const snapshot=demo?demoSnapshot:snapshots[active]; const items=snapshot?.items||[];
   const current=snapshot?.row||rows.find(r=>r.sessionId===active);
@@ -39,16 +43,34 @@ function App(){
   async function refreshSessions(){if(bridge)await attempt(async()=>{const result=await bridge.listSessions();setRows(result.sessions);});}
   async function refreshGit(root=project){if(bridge&&root)await attempt(async()=>setGit(await bridge.changes(root)));}
   async function refreshFiles(relative='',root=project){if(bridge&&root)await attempt(async()=>{setFileEntries(await bridge.files(root,relative));setFileDirectory(relative);});}
+  async function restoreWorkspace(){
+    if(!bridge||hydrating.current)return;hydrating.current=true;
+    try{
+      const result=await bridge.listSessions();setRows(result.sessions);
+      const saved=preferences.current.lastSession;
+      if(saved&&result.sessions.some((r:Row)=>r.sessionId===saved)){
+        try{const row=await bridge.resumeSession(saved);setActive(row.sessionId);if(row.workspaceRoot){setProject(row.workspaceRoot);setProjects(old=>[row.workspaceRoot,...old.filter(p=>p!==row.workspaceRoot)]);}}
+        catch{setError('Your previous conversation could not be reopened. It is still in the conversation list.');}
+      }
+    }catch{setError('Your saved conversations could not be loaded. You can try again or start a new conversation.');}
+    finally{hydrating.current=false;}
+  }
+  function applySetup(state:SetupState,force=false){
+    const changed=previousPhase.current!==state.phase;previousPhase.current=state.phase;
+    setSetupState(state);setConnected(state.phase==='ready');
+    if(state.phase==='ready'){setSettings(false);setDemo(false);if(booted.current&&(changed||force))void restoreWorkspace();}
+  }
   useEffect(()=>{
     document.documentElement.dataset.theme=theme;
   },[theme]);
   useEffect(()=>{
-    if(!bridge)return;
-    void attempt(async()=>{const s=await bridge.bootstrap();setProjects(s.projects);setProject(s.projects[0]||'');setBinary(s.binary);setTheme(s.theme||'dark');});
-    return bridge.onEvent(event=>{
+    if(!bridge){applySetup({phase:'welcome',message:'Sign in to start making things with Muse.'});return;}
+    let mounted=true;
+    const unsubscribe=bridge.onEvent(event=>{
       if(event.type==='session')putSnapshot(event);
-      if(event.type==='connected'){setConnected(true);setConnection(event.info);if(event.warning)setError('The agent and SDK schema versions differ. Some features may be unavailable.');}
-      if(event.type==='disconnected'){setConnected(false);setBusy(false);setError(`Muse Code disconnected (${event.exit?.kind||'connection ended'}). Reconnect in Settings.`);}
+      if(event.type==='connected'){setConnection(event.info);if(event.warning)setError('Muse needs an update for all features to work correctly.');}
+      if(event.type==='setup')applySetup(event);
+      if(event.type==='disconnected'){setConnected(false);setBusy(false);}
       if(event.type==='error')setError(event.text);
       if(event.type==='notification'){
         setEvents(old=>[...old.slice(-249),event]);
@@ -58,9 +80,15 @@ function App(){
       }
       if(event.type==='diagnostic')setEvents(old=>[...old.slice(-249),event]);
     });
+    void bridge.bootstrap().then(s=>{
+      if(!mounted)return;
+      preferences.current=s;booted.current=true;setProjects(s.projects);const root=s.lastProject||s.projects[0]||'';setProject(root);setText(s.drafts?.[root]||'');setBinary(s.binary);setTheme(s.theme||'dark');setConnection(s.connection||null);applySetup(s.setup,true);
+    }).catch(()=>{if(mounted)applySetup({phase:'error',message:'Your workspace could not be opened. Try again.'});});
+    return()=>{mounted=false;unsubscribe();};
   },[]);
+  useEffect(()=>{if(!booted.current||!bridge||demo||!project)return;const timer=setTimeout(()=>{void bridge.remember({project,sessionId:active,draft:text}).catch(()=>{});},350);return()=>clearTimeout(timer);},[project,active,text,demo]);
   useEffect(()=>{if(project){void refreshGit();void refreshFiles();}setPreview(null);},[project]);
-  useEffect(()=>{if(!connected||!active||!bridge)return;void attempt(async()=>{const m=await bridge.models(active);setModels(m.models);});},[active,connected]);
+  useEffect(()=>{if(!connected||!bridge)return;void attempt(async()=>{const m=await bridge.models(active||undefined);setModels(m.models);});},[active,connected]);
   useEffect(()=>{if(!connected||!active||!bridge||panel!=='extensions')return;void attempt(async()=>setInventory(await bridge.inventory(active)));},[panel,active,connected]);
   useEffect(()=>{const el=bottom.current;const scroll=el?.parentElement;if(scroll&&scroll.scrollHeight-scroll.scrollTop-scroll.clientHeight<250)el?.scrollIntoView({behavior:'smooth'});},[items]);
   useEffect(()=>{if(!running&&project)void refreshGit();},[running]);
@@ -68,13 +96,14 @@ function App(){
     const handler=(e:KeyboardEvent)=>{if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();setPalette(p=>!p);}if(e.key==='Escape'){setPalette(false);setSettings(false);setPreview(null);}};
     window.addEventListener('keydown',handler);return()=>window.removeEventListener('keydown',handler);
   },[]);
-  async function openProject(){if(!bridge){setError('Folder access is available in the MuseCode desktop app.');return;}await attempt(async()=>{const root=await bridge.pickProject();if(root){setProjects(old=>[root,...old.filter(p=>p!==root)]);setProject(root);setActive('');setDemo(false);}});}
-  async function connect(){if(!bridge)return;setConnecting(true);setConnected(false);await attempt(async()=>{await bridge.saveSettings({binary,theme});const info=await bridge.connect();setConnection(info);setConnected(true);setDemo(false);setActive('');await refreshSessions();setSettings(false);});setConnecting(false);}
+  async function openProject(){if(!bridge){setError('Folder access is available in the MuseCode desktop app.');return;}await attempt(async()=>{const root=await bridge.pickProject();if(root){setProjects(old=>[root,...old.filter(p=>p!==root)]);setProject(root);setActive('');if(connected)setDemo(false);}});}
+  async function connect(){if(!bridge)return;setConnecting(true);await attempt(async()=>{await bridge.saveSettings({binary,theme});applySetup(await bridge.connect());});setConnecting(false);}
+  async function startSetup(){if(!bridge){setError('Sign-in is available in the MuseCode desktop app.');return;}setDemo(false);applySetup({phase:'connecting',message:'Getting your workspace ready…'});await attempt(async()=>applySetup(await bridge.startSetup()));}
   async function newChat(){setDemo(false);setActive('');setText('');composer.current?.focus();}
-  async function selectSession(row:Row){if(!bridge||!connected){setSettings(true);return;}await attempt(async()=>{const r=await bridge.resumeSession(row.sessionId);setActive(r.sessionId);if(r.workspaceRoot){setProjects(old=>[r.workspaceRoot,...old.filter(p=>p!==r.workspaceRoot)]);setProject(r.workspaceRoot);}setDemo(false);});}
+  async function selectSession(row:Row){if(!bridge||!connected){void startSetup();return;}await attempt(async()=>{const r=await bridge.resumeSession(row.sessionId);setActive(r.sessionId);if(r.workspaceRoot){setProjects(old=>[r.workspaceRoot,...old.filter(p=>p!==r.workspaceRoot)]);setProject(r.workspaceRoot);}setDemo(false);});}
   async function send(ifBusy='steer'){
     if(!text.trim()||creating)return;if(demo){setError('Exit the interface preview and connect Muse Code to send a real message.');return;}
-    if(!project){await openProject();return;}if(!connected){setSettings(true);return;}if(!bridge)return;
+    if(!connected){void startSetup();return;}if(!project){await openProject();return;}if(!bridge)return;
     setCreating(true);const prompt=text;let id=active;
     await attempt(async()=>{
       if(!id){const r=await bridge.newSession(project,model);id=r.sessionId;setActive(id);putSnapshot({sessionId:id,row:r,items:[],approvals:[],questions:[]});}
@@ -82,7 +111,7 @@ function App(){
       await bridge.send(id,prompt,effort,ifBusy);setText('');setBusy(true);
     });setCreating(false);
   }
-  async function changeModel(value:string){if(!bridge)return;if(active&&connected){const result=await attempt(()=>bridge.setModel(active,value));if(!result)return;}setModel(value);}
+  async function changeModel(value:string){if(!bridge)return;const chosen=active&&!value?models.find(m=>m.isDefault)?.modelId:value;if(active&&connected){if(!chosen)return;const result=await attempt(()=>bridge.setModel(active,chosen));if(!result)return;}setModel(chosen||'');}
   async function action(name:string){if(!bridge||!active||demo)return;
     await attempt(async()=>{if(name==='fork'){const r=await bridge.fork(active);setActive(r.sessionId);await refreshSessions();}if(name==='compact')await bridge.compact(active);if(name==='export')await bridge.exportSession(active);});
   }
@@ -91,7 +120,7 @@ function App(){
   const filtered=rows.filter(r=>(!project||r.workspaceRoot===project)&&title(r).toLowerCase().includes(search.toLowerCase()));
   return <div className="app">
     <header className="titlebar"><div className="brand"><Mark small/><strong>MuseCode</strong><span className="alpha">alpha</span></div><div className="titlebar-center"><span className="title-dot"/>{basename(project||'Your workspace')}</div><div className="window-controls"><button aria-label="Minimize" onClick={()=>void bridge?.window('minimize')}><Minus size={14}/></button><button aria-label="Maximize" onClick={()=>void bridge?.window('maximize')}><Maximize2 size={12}/></button><button aria-label="Close window" onClick={()=>void bridge?.window('close')}><X size={15}/></button></div></header>
-    <div className="workspace">
+    {!demo&&(setupState.phase!=='ready'||!project)?<Onboarding state={setupState} needsProject={setupState.phase==='ready'&&!project} onStart={()=>void startSetup()} onCancel={()=>void attempt(async()=>{await bridge!.cancelSetup();applySetup(await bridge!.setupState());})} onBrowser={()=>void attempt(()=>bridge!.openSignIn())} onProject={()=>void openProject()} onSettings={()=>setSettings(true)} onPreview={startPreview}/>:<div className="workspace">
       <aside className="sidebar"><button className="new-chat" onClick={newChat}><Plus size={17}/>New conversation<span>Ctrl K</span></button>
         <button className="nav-item" onClick={()=>setPalette(true)}><Search size={16}/>Search & commands</button>
         <div className="side-heading"><span>PROJECTS</span><button aria-label="Open project" onClick={openProject}><Plus size={15}/></button></div>
@@ -117,7 +146,7 @@ function App(){
         </div>
         {(snapshot?.approvals||[]).map(a=><ApprovalCard key={a.approvalId} approval={a} onChoose={choice=>attempt(()=>bridge!.approve(active,a.approvalId,choice))}/>)}
         {(snapshot?.questions||[]).map(q=><QuestionCard key={q.userInputId} prompt={q} onAnswer={answers=>attempt(()=>bridge!.answer(active,q.userInputId,answers))} onDecline={()=>attempt(()=>bridge!.decline(active,q.userInputId))}/>)}
-        <div className="composer-area"><div className={`composer ${running?'is-running':''}`}><textarea ref={composer} aria-label="Message MuseCode" placeholder={running?'Add a thought or steer the work…':'Ask Muse to build, fix, or explore…'} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send(e.altKey?'queue':'steer');}}}/><div className="composer-bottom"><div className="composer-options"><button title="Choose project folder" onClick={openProject}><FolderOpen size={17}/></button><span className="divider"/><span className="agent-mode"><ShieldCheck size={13}/>Agent</span><select aria-label="Model" value={model||effectiveModel||''} disabled={!models.length||demo||creating} onChange={e=>void changeModel(e.target.value)}><option value="">{models.length?'Agent default':readableModel}</option>{models.map(m=><option key={m.modelId} value={m.modelId}>{m.displayLabel}</option>)}</select><select aria-label="Reasoning effort" value={effort} onChange={e=>setEffort(e.target.value)}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(v=><option key={v} value={v}>{v==='high'?'Think deeper':v}</option>)}</select></div><div className="send-controls">{running&&<button aria-label="Stop agent" className="stop-button" onClick={()=>void attempt(()=>bridge!.cancel(active))}><Square size={13}/></button>}<button className="send-button" aria-label={running?'Send follow-up':'Send message'} disabled={!text.trim()||creating} onClick={()=>void send()}>{creating?<Loader2 size={17} className="spin"/>:<ArrowUp size={19}/>}</button></div></div></div><div className="composer-caption"><span>{demo?'Preview only':connected?'Muse Code’s native permissions and sandbox apply.':'Connect your local Muse Code agent to get started.'}</span><span>Enter to send · Shift Enter for newline</span></div></div>
+        <div className="composer-area"><div className={`composer ${running?'is-running':''}`}><textarea ref={composer} aria-label="Message MuseCode" placeholder={running?'Add a thought or steer the work…':'Ask Muse to build, fix, or explore…'} value={text} onChange={e=>setText(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey&&!e.nativeEvent.isComposing){e.preventDefault();void send(e.altKey?'queue':'steer');}}}/><div className="composer-bottom"><div className="composer-options"><button title="Choose project folder" onClick={openProject}><FolderOpen size={17}/></button><span className="divider"/><span className="agent-mode"><ShieldCheck size={13}/>Agent</span><select aria-label="Model" value={effectiveModel||''} disabled={!models.length||demo||creating} onChange={e=>void changeModel(e.target.value)}><option value="">{models.length?'Agent default':readableModel}</option>{models.map(m=><option key={m.modelId} value={m.modelId}>{m.displayLabel}</option>)}</select><select aria-label="Reasoning effort" value={effort} onChange={e=>setEffort(e.target.value)}>{['none','minimal','low','medium','high','xhigh','max','ultra'].map(v=><option key={v} value={v}>{v==='high'?'Think deeper':v}</option>)}</select></div><div className="send-controls">{running&&<button aria-label="Stop agent" className="stop-button" onClick={()=>void attempt(()=>bridge!.cancel(active))}><Square size={13}/></button>}<button className="send-button" aria-label={running?'Send follow-up':'Send message'} disabled={!text.trim()||creating} onClick={()=>void send()}>{creating?<Loader2 size={17} className="spin"/>:<ArrowUp size={19}/>}</button></div></div></div><div className="composer-caption"><span>{demo?'Preview only':connected?'Muse Code’s native permissions and sandbox apply.':'Connect your local Muse Code agent to get started.'}</span><span>Enter to send · Shift Enter for newline</span></div></div>
       </main>
       {showPanel&&<aside className="inspector"><div className="inspector-tabs">{[{id:'changes',icon:GitPullRequest,label:'Changes'},{id:'files',icon:Files,label:'Files'},{id:'activity',icon:Layers,label:'Activity'}].map(t=><button key={t.id} className={panel===t.id?'active':''} onClick={()=>{setPanel(t.id);setPreview(null);}}><t.icon size={14}/>{t.label}{t.id==='changes'&&git.files.length>0&&<span className="count">{git.files.length}</span>}</button>)}</div>
         <div className="inspector-content">
@@ -130,9 +159,9 @@ function App(){
         </div>
         <div className="inspector-bottom"><div className="context-meter"><div><span>Session context</span><span>{contextLabel}</span></div><div className="meter-track"><span style={{width:usage?.sessionId===active&&usage.windowTokens?`${Math.min(100,usage.usedTokens/usage.windowTokens*100)}%`:'0%'}}/></div></div>{plan?.sessionId===active&&<details className="plan"><summary><ListChecks size={14}/>Agent plan</summary><pre>{JSON.stringify(plan,null,2)}</pre></details>}<div className="inspector-tools"><button className={panel==='extensions'?'selected':''} onClick={()=>{setPanel('extensions');setPreview(null);}}><Layers size={14}/>Extensions</button><button className={panel==='terminal'?'selected':''} onClick={()=>{setPanel('terminal');setPreview(null);}}><Terminal size={14}/>Terminal</button><button title="Compact context" disabled={!active||demo} onClick={()=>action('compact')}><Zap size={14}/></button></div></div>
       </aside>}
-    </div>
+    </div>}
     <footer className="statusbar"><span><span className={`status-dot ${connected?'online':''}`}/>{demo?'Interface preview':connected?'Connected to your local agent':'Local workspace'}</span><span>{git.branch&&<><GitBranch size={12}/>{git.branch}<span className="status-sep">·</span></>}<Globe size={12}/>Open source · built for Muse Code</span></footer>
-    {settings&&<div className="modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setSettings(false);}}><section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title"><div className="modal-heading"><span><Settings2 size={18}/>Your Muse workspace</span><button aria-label="Close settings" onClick={()=>setSettings(false)}><X size={18}/></button></div><h2 id="settings-title">Meet your agent where it lives.</h2><p>MuseCode connects to the official Meta Muse Code CLI installed on your machine. Sign in with the CLI once; your GUI uses the same account and capabilities.</p><label className="form-label" htmlFor="binary">MUSE CODE EXECUTABLE</label><div className="binary-input"><input id="binary" placeholder="Select muse or muse-bin-….exe" value={binary} onChange={e=>setBinary(e.target.value)}/><button onClick={()=>void attempt(async()=>{const p=await bridge?.pickBinary();if(p)setBinary(p);})}><FolderOpen size={17}/>Browse</button></div><p className="field-hint">Use the native executable, rather than a .cmd or .ps1 launcher. No API keys are stored by MuseCode.</p><div className="settings-row"><div><strong>Appearance</strong><small>Make this space feel like yours.</small></div><div className="segmented"><button className={theme==='dark'?'active':''} onClick={()=>{setTheme('dark');void bridge?.saveSettings({theme:'dark'});}}>Dark</button><button className={theme==='light'?'active':''} onClick={()=>{setTheme('light');void bridge?.saveSettings({theme:'light'});}}>Light</button></div></div><div className="safety-note"><ShieldCheck size={20}/><div><strong>The full agent. Its native guardrails.</strong><p>MuseCode keeps Muse’s permission policy and sandbox settings. Approvals and questions appear directly in your conversation.</p></div></div>{error&&<div className="modal-error" role="alert">{error}</div>}<div className="settings-buttons"><button className="soft-button" onClick={()=>void bridge?.openLink('https://dev.meta.ai/docs/muse-code')}>Installation guide<Globe size={13}/></button><button className="primary-button" onClick={connect} disabled={connecting||!bridge}>{connecting?<Loader2 size={16} className="spin"/>:<Zap size={16}/>} {connecting?'Connecting…':connected?'Reconnect agent':'Connect Muse Code'}</button></div>{connected&&<button className="text-button" onClick={()=>void attempt(async()=>{await bridge!.disconnect();setConnected(false);})}>Disconnect agent</button>}<button className="preview-link" onClick={startPreview}>Just looking around? Explore the interface<ChevronRight size={13}/></button></section></div>}
+    {settings&&<Settings state={setupState} theme={theme} binary={binary} connecting={connecting} error={error} onClose={()=>setSettings(false)} onTheme={value=>{setTheme(value);void bridge?.saveSettings({theme:value});}} onBinary={setBinary} onBrowse={()=>void attempt(async()=>{const p=await bridge?.pickBinary();if(p)setBinary(p);})} onReconnect={()=>void connect()} onStart={()=>{setSettings(false);void startSetup();}} onDisconnect={()=>void attempt(async()=>{await bridge!.disconnect();applySetup(await bridge!.setupState());})} onSignOut={()=>void attempt(()=>bridge!.signOut())} onDocs={()=>void bridge?.openLink('https://dev.meta.ai/docs/muse-code')}/>}
     {palette&&<div className="modal-overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setPalette(false);}}><section className="command-modal" role="dialog" aria-modal="true" aria-label="Command palette"><div className="command-input"><Search size={18}/><input autoFocus placeholder="What would you like to do?" value={paletteText} onChange={e=>setPaletteText(e.target.value)}/><kbd>ESC</kbd></div>{actions.filter(a=>a.name.toLowerCase().includes(paletteText.toLowerCase())).map(a=><button key={a.name} onClick={()=>{setPalette(false);setPaletteText('');void a.run();}}><a.icon size={17}/>{a.name}<ChevronRight size={13}/></button>)}<div className="command-footer"><Command size={12}/>A shortcut to your workspace</div></section></div>}
     {rename&&<div className="modal-overlay"><form className="command-modal rename-modal" role="dialog" aria-label="Rename conversation" onSubmit={e=>{e.preventDefault();void attempt(async()=>{await bridge!.rename(active,renameText);setRename(false);await refreshSessions();});}}><h3>Rename conversation</h3><input autoFocus aria-label="Conversation name" value={renameText} onChange={e=>setRenameText(e.target.value)}/><div><button type="button" className="soft-button" onClick={()=>setRename(false)}>Cancel</button><button className="primary-button">Save name</button></div></form></div>}
   </div>;

@@ -19,21 +19,22 @@ test('Desktop onboarding, preview, themes, folder picker, files, and real Git di
   try{
     const page=await app.firstWindow();page.on('pageerror',e=>errors.push(e.message));
     const screenshot=name=>process.env.MUSECODE_TEST_PACKAGED?Promise.resolve():page.screenshot({path:path.join(projectRoot,'screenshots',name)});
-    await page.getByRole('heading',{name:'What will you make?'}).waitFor();
+    await page.getByRole('heading',{name:'Big ideas start here.'}).waitFor();
     assert.equal(await page.evaluate(()=>typeof window.require),'undefined');
     await mkdir(path.join(projectRoot,'screenshots'),{recursive:true});
-    await screenshot('welcome.png');
+    await screenshot('onboarding.png');
     await page.getByRole('button',{name:'Settings',exact:true}).click();
-    await page.getByRole('dialog',{name:'Meet your agent where it lives.'}).waitFor();
+    await page.getByRole('dialog',{name:'Make this space yours.'}).waitFor();
+    assert.equal(await page.locator('#binary').isVisible(),false);
     await page.getByRole('button',{name:'Light',exact:true}).click();
     assert.equal(await page.locator('html').getAttribute('data-theme'),'light');
     await page.getByRole('button',{name:'Dark',exact:true}).click();
-    await page.getByRole('button',{name:'Just looking around? Explore the interface'}).click();
+    await page.getByRole('button',{name:'Close settings'}).click();
+    await page.getByRole('button',{name:'Take a look around'}).click();
     await page.getByText('Interface preview · no model calls or file changes').waitFor();
     await page.getByRole('button',{name:'Activity',exact:true}).click();
     await page.locator('.activity-item').filter({hasText:'read_file'}).first().waitFor();
     await screenshot('conversation.png');
-    await page.getByRole('button',{name:'Exit preview'}).click();
     await page.keyboard.press('Control+k');await page.getByRole('dialog',{name:'Command palette'}).waitFor();await page.keyboard.press('Escape');
     await app.evaluate(({dialog},root)=>{dialog.showOpenDialog=async()=>({canceled:false,filePaths:[root]});},root);
     await page.getByRole('button',{name:'Open your first project'}).click();
@@ -45,8 +46,9 @@ test('Desktop onboarding, preview, themes, folder picker, files, and real Git di
     await page.getByRole('button',{name:'hello.ts',exact:true}).click();
     await page.getByText('export const hello = "world";', {exact:true}).waitFor();
     await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await page.locator('.advanced-settings summary').click();
     await page.locator('#binary').fill(path.join(temp,'missing.exe'));
-    await page.getByRole('button',{name:'Connect Muse Code',exact:true}).click();
+    await page.getByRole('button',{name:'Reconnect',exact:true}).click();
     await page.locator('.modal-error').waitFor();
     assert.match(await page.locator('.modal-error').innerText(),/could not be found/i);
     await page.getByRole('button',{name:'Close settings'}).click();

@@ -1,24 +1,32 @@
 # Alpha validation — October 12, 2026
 
-Validated on Windows x64 with Node.js 24.14.1, Electron 44.7.0 and the pinned Meta Muse Code SDK 1.4.6.
+MuseCode 0.2.0 was validated on Windows x64 with Node.js 24.14.1, Electron 44.7.0 and Meta Muse Code SDK/runtime 1.4.6.
 
 | Check | Result |
 | --- | --- |
 | TypeScript renderer (`npm run check`) | Passed |
 | Production frontend build (`npm run build`) | Passed |
+| Native handshake and experimental account capability | Passed with released Muse 1.4.6 |
+| Native account status and device-login start/cancel | Passed with released Muse 1.4.6; no browser or model call |
+| Fresh automatic Windows runtime installation | Passed using the app's installer module and official Meta downloads |
 | MSP initialization, streaming and final-revision authority | Passed against deterministic fixture host |
 | Explicit native approval choice/stage round trip | Passed against deterministic fixture host |
 | Session resume and history restoration | Passed against deterministic fixture host |
-| Missing agent binary and unsupported commands | Passed |
+| First-run account confirmation and recovery states | Passed against deterministic fixture host |
+| Returning account and bounded reconnect without prompt replay | Passed against deterministic fixture host |
+| Startup cancellation shuts down the owned host | Passed |
+| Active-version discovery and installer integrity/environment constraints | Passed |
 | Path traversal, symlink escape, binary/size preview limits | Passed |
 | Git status with spaces/renames; staged, unstaged, untracked diffs | Passed |
 | Source Electron desktop acceptance suite | Passed |
-| Packaged Windows executable desktop acceptance suite | Passed |
+| Packaged Windows executable desktop acceptance suite | Passed: both tests |
 | Unsigned Windows NSIS installer build | Passed |
 | Full dependency audit (`npm audit`) | Zero reported vulnerabilities |
 
-The five Node tests and one desktop acceptance test passed. The desktop acceptance test also passed when launched against `release/win-unpacked/MuseCode.exe`.
+All 14 Node tests and both source desktop acceptance tests passed. Desktop tests exercise native-process transport through an isolated fixture, rather than calling a model. They verify guided sign-in, browser-link handling, project selection, native approvals, saved drafts, conversation restoration after restart, offline preview labels, themes, command palette, filesystem/Git IPC, advanced settings and renderer isolation. The app holds a single-instance lock. Source screenshots were captured and visually reviewed.
 
-The desktop acceptance test covers onboarding, a labeled offline preview, activity rendering, theme switching, command palette, native picker and preload IPC, actual local file previews, actual Git diffs, missing-binary errors, renderer isolation and a compact window size. Screenshots were captured and visually reviewed from the source desktop build. Packaged acceptance verifies interaction and IPC without screenshot capture because hidden-window capture did not complete reliably in that build.
+Both desktop tests also passed against `release/win-unpacked/MuseCode.exe`. Packaged acceptance verifies interaction and IPC without screenshot capture because hidden-window capture was unreliable in earlier checks. The Windows NSIS installer was generated from this packaged build.
 
-Not validated: real Meta authentication, a live Muse/Wonder coding session, real model entitlement changes, native sandbox behavior, macOS/Linux packaging, signed installation, or full TUI feature parity. The fixture simulates transport semantics and never calls a model. The installer was generated, not installed on the user's machine.
+The managed installer was tested against a fresh app-owned directory. It downloaded and verified Meta's actual runtime without changing PATH or starting login. A subsequent smoke test initialized that binary, read the logged-out account, started a native device-code login, and cancelled it. This validates real native integration through login initiation; it does not establish that a user completed authorization.
+
+Not validated: completed Meta authorization, a live Muse/Wonder coding session, real model entitlement changes, native sandbox behavior, macOS/Linux packaging, signed installation, or full TUI feature parity. The Windows installer is unsigned and was generated, not installed on the user's machine. Runtime installation and update checks require access to Meta's official download endpoints. Account access and model availability remain controlled by Meta.

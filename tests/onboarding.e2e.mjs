@@ -1,0 +1,45 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { _electron as electron, expect } from '@playwright/test';
+import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+const root=fileURLToPath(new URL('..',import.meta.url));
+test('Sign-in, project selection, native approvals, drafts and automatic session restore',async()=>{
+  const temp=await mkdtemp(path.join(tmpdir(),'muse-onboarding-'));
+  const profile=path.join(temp,'profile'),project=path.join(temp,'first project');await mkdir(profile);await mkdir(project);await writeFile(path.join(project,'hello.ts'),'export const hello="world";');execFileSync('git',['-C',project,'init'],{windowsHide:true});
+  const env={...process.env,MUSECODE_TEST_HIDDEN:'1',MUSECODE_TEST_USER_DATA:profile,MUSECODE_TEST_HOST:path.join(root,'tests','fixture-host.mjs'),MUSECODE_FIXTURE_AUTH:path.join(temp,'fixture-auth'),MUSECODE_FIXTURE_SESSION:path.join(temp,'fixture-session.json'),MUSECODE_FIXTURE_DELAY:'1500'};delete env.ELECTRON_RUN_AS_NODE;
+  const options=process.env.MUSECODE_TEST_PACKAGED?{executablePath:process.env.MUSECODE_TEST_PACKAGED,args:[]}:{args:['.'],cwd:root};
+  let app;
+  const launch=async()=>{app=await electron.launch({...options,env,timeout:15000});await app.evaluate(({shell,dialog},project)=>{global.__museBrowserLinks=[];shell.openExternal=async url=>{global.__museBrowserLinks.push(url);};dialog.showOpenDialog=async()=>({canceled:false,filePaths:[project]});},project);return app.firstWindow();};
+  try{
+    let page=await launch();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+    await page.getByRole('heading',{name:'Big ideas start here.'}).waitFor();
+    assert.equal(await page.locator('#binary').count(),0);
+    await page.getByRole('button',{name:'Sign in with Meta',exact:true}).click();
+    try{await page.getByText('TEST-CODE',{exact:true}).waitFor();}
+    catch(error){throw new Error(`Sign-in did not reach verification: ${(await page.locator('body').innerText()).slice(-2000)}`,{cause:error});}
+    if(!process.env.MUSECODE_TEST_PACKAGED)await page.screenshot({path:path.join(root,'screenshots','sign-in.png')});
+    await page.getByRole('heading',{name:'Make yourself at home.'}).waitFor();
+    assert.deepEqual(await app.evaluate(()=>global.__museBrowserLinks),['https://auth.meta.com/device?code=FIXTURE']);
+    assert.equal(await app.evaluate(({app})=>app.hasSingleInstanceLock()),true);
+    await page.getByRole('button',{name:'Open a project',exact:true}).click();
+    await page.getByRole('heading',{name:'What will you make?'}).waitFor();
+    await page.getByRole('textbox',{name:'Message MuseCode'}).fill('Make one small change.');
+    await page.getByRole('button',{name:'Send message',exact:true}).click();
+    await page.getByText('Muse needs your approval',{exact:true}).waitFor();
+    await page.getByRole('button',{name:'Allow once',exact:true}).click();
+    await page.getByText('Authoritative final answer.',{exact:true}).waitFor();
+    await page.getByRole('textbox',{name:'Message MuseCode'}).fill('Continue after restarting.');
+    await expect.poll(async()=>JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).drafts?.[project]).toBe('Continue after restarting.');
+    assert.equal(JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).lastSession,'test-session');
+    await app.close();app=null;
+    page=await launch();page.on('pageerror',e=>errors.push(e.message));
+    await page.getByText('Authoritative final answer.',{exact:true}).waitFor();
+    assert.equal(await page.getByRole('textbox',{name:'Message MuseCode'}).inputValue(),'Continue after restarting.');
+    assert.deepEqual(await app.evaluate(()=>global.__museBrowserLinks),[]);
+    assert.deepEqual(errors,[]);
+  }finally{if(app)await app.close();await rm(temp,{recursive:true,force:true});}
+});

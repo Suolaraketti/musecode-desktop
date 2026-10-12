@@ -4,33 +4,40 @@ import { fileURLToPath } from 'node:url';
 import { readFile, writeFile, mkdir, realpath, stat, access } from 'node:fs/promises';
 import { MuseRuntime } from './runtime.mjs';
 import * as workspace from './workspace.mjs';
+import { RuntimeInstaller, SetupController, resolveBinary } from './setup.mjs';
 const directory=path.dirname(fileURLToPath(import.meta.url));
 if(process.env.MUSECODE_TEST_USER_DATA)app.setPath('userData',process.env.MUSECODE_TEST_USER_DATA);
-let win, settings={binary:'',projects:[],theme:'dark'}, projects=new Set(), quitting=false;
-const runtime=new MuseRuntime(payload=>{if(win&&!win.isDestroyed()) win.webContents.send('muse:event',payload);});
+const ownsInstance=app.requestSingleInstanceLock();
+if(!ownsInstance)app.exit(0);
+let win, setup, installer, settings={binary:'',projects:[],theme:'dark',autoConnect:true}, projects=new Set(), quitting=false;
+function emit(payload){if(win&&!win.isDestroyed())win.webContents.send('muse:event',payload);if(setup)void setup.notification(payload).catch(()=>{});}
+const runtime=new MuseRuntime(emit);
+// Test-owned host seam: never exposed through renderer IPC or persisted settings.
+if(process.env.MUSECODE_TEST_HOST){const connect=runtime.connect.bind(runtime);runtime.connect=()=>connect(process.execPath,path.dirname(process.env.MUSECODE_TEST_HOST),[process.env.MUSECODE_TEST_HOST],{...process.env,ELECTRON_RUN_AS_NODE:'1'});}
 const configPath=()=>path.join(app.getPath('userData'),'settings.json');
 async function save(){await mkdir(app.getPath('userData'),{recursive:true});await writeFile(configPath(),JSON.stringify(settings,null,2));}
 async function known(root){const canonical=await realpath(root); if(!projects.has(canonical)) throw new Error('Open this project using the folder picker first.'); return canonical;}
 function validateText(value,limit=100000){if(typeof value!=='string'||!value.trim()||value.length>limit)throw new Error('Please enter valid text.');return value;}
-async function findBinary(){
-  const names=process.platform==='win32'?['muse.exe']:['muse'];
-  for(const folder of (process.env.PATH||'').split(path.delimiter))for(const name of names){const candidate=path.join(folder,name);try{await access(candidate);return candidate;}catch{}}
-  const local=process.env.LOCALAPPDATA; if(local){try{const {readdir}=await import('node:fs/promises');const folder=path.join(local,'Programs','muse');const names=(await readdir(folder)).filter(n=>/^muse-bin-.*\.exe$/.test(n)).sort().reverse();if(names.length)return path.join(folder,names[0]);}catch{}}
-  return '';
-}
+async function findBinary(){if(process.env.MUSECODE_TEST_HOST)return process.execPath;return resolveBinary({explicit:settings.binary,managed:path.join(app.getPath('userData'),'runtime'),bundled:path.join(process.resourcesPath,'bin')});}
 function register(name,fn){ipcMain.handle(`muse:${name}`,async(event,...args)=>{
   if(event.sender!==win.webContents||event.senderFrame!==win.webContents.mainFrame)throw new Error('Untrusted caller.');
   try{return await fn(...args);}catch(error){throw new Error(error.message||String(error));}
 });}
-register('bootstrap',async()=>({...settings,connected:!!runtime.host,platform:process.platform}));
+register('bootstrap',async()=>{const state=await setup.initialize();return {...settings,setup:state,connection:runtime.host?.initializeResult,platform:process.platform};});
+register('setupState',()=>setup.state);
+register('startSetup',()=>setup.start());
+register('cancelSetup',()=>setup.cancel());
+register('openSignIn',async()=>{if(!setup.state.verificationUrl)throw new Error('Start sign-in again to get a new link.');await shell.openExternal(setup.state.verificationUrl);});
+register('signOut',async()=>{if(runtime.host)await setup.acceptAccount(await runtime.request('account/logout',{}));});
+register('remember',async(view)=>{if(view.project)settings.lastProject=await known(view.project);if(typeof view.sessionId==='string')settings.lastSession=view.sessionId;if(typeof view.draft==='string'&&view.draft.length<=100000&&view.project){settings.drafts={...settings.drafts,[view.project]:view.draft};}await save();});
 register('pickProject',async()=>{
   const selection=await dialog.showOpenDialog(win,{title:'Open a project',properties:['openDirectory']});if(selection.canceled)return null;
-  const root=await realpath(selection.filePaths[0]);projects.add(root);settings.projects=[root,...settings.projects.filter(p=>p!==root)].slice(0,20);await save();return root;
+  const root=await realpath(selection.filePaths[0]);projects.add(root);settings.projects=[root,...settings.projects.filter(p=>p!==root)].slice(0,20);settings.lastProject=root;settings.lastSession='';await save();return root;
 });
 register('pickBinary',async()=>{const r=await dialog.showOpenDialog(win,{title:'Select the native Muse Code binary',properties:['openFile'],filters:process.platform==='win32'?[{name:'Muse executable',extensions:['exe']}]:undefined});return r.canceled?null:r.filePaths[0];});
 register('saveSettings',async(next)=>{if(typeof next.binary==='string')settings.binary=next.binary;if(['dark','light'].includes(next.theme))settings.theme=next.theme;await save();return settings;});
-register('connect',async()=>{const binary=settings.binary||await findBinary();if(!binary)throw new Error('Muse Code is not installed or could not be found. Choose its native executable in Settings.');let info;try{info=await stat(binary);}catch{throw new Error('Muse Code could not be found at this path. Choose its native executable in Settings.');}if(!info.isFile())throw new Error('Choose a native Muse executable.');return runtime.connect(binary);});
-register('disconnect',async()=>{await runtime.disconnect();return true;});
+register('connect',async()=>{if(settings.binary){try{if(!(await stat(settings.binary)).isFile())throw new Error();}catch{throw new Error('Muse Code could not be found at this path. Choose its native executable in Advanced settings.');}}await runtime.disconnect();setup.set({phase:'welcome',message:'Reconnecting your account…'});return setup.start();});
+register('disconnect',()=>setup.disconnect());
 register('newSession',async(root,modelId)=>runtime.acquire('session/start',{workspaceRoot:await known(root),...(modelId?{modelId}: {})}));
 register('resumeSession',async(id)=>{validateText(id,1000);const row=await runtime.acquire('session/resume',{sessionId:id,history:'inline'});if(row.workspaceRoot){const root=await realpath(row.workspaceRoot);projects.add(root);settings.projects=[root,...settings.projects.filter(p=>p!==root)].slice(0,20);await save();}return row;});
 register('listSessions',async()=>runtime.request('session/list',{limit:100}));
@@ -62,15 +69,19 @@ register('exportSession',async(id)=>{
 });
 register('openLink',async(url)=>{const parsed=new URL(url);if(parsed.protocol!=='https:')throw new Error('Only HTTPS links can be opened.');await shell.openExternal(parsed.href);});
 register('window',action=>{if(action==='minimize')win.minimize();if(action==='maximize')win.isMaximized()?win.unmaximize():win.maximize();if(action==='close')win.close();});
+app.on('second-instance',()=>{if(win){if(win.isMinimized())win.restore();win.show();win.focus();}});
 app.whenReady().then(async()=>{
   try{settings={...settings,...JSON.parse(await readFile(configPath(),'utf8'))};}catch{}
   if(!Array.isArray(settings.projects))settings.projects=[];
   for(const p of settings.projects)try{projects.add(await realpath(p));}catch{}
-  if(!settings.binary)settings.binary=await findBinary();
-  win=new BrowserWindow({width:1440,height:940,minWidth:960,minHeight:640,show:process.env.MUSECODE_TEST_HIDDEN!=='1',title:'MuseCode',icon:path.join(directory,'../build/icon.png'),backgroundColor:'#111214',frame:false,webPreferences:{preload:path.join(directory,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  settings.projects=[...projects];if(!projects.has(settings.lastProject))settings.lastProject='';
+  installer=new RuntimeInstaller({directory:path.join(app.getPath('userData'),'runtime'),emit:state=>{if(setup?.state.phase==='preparing')setup.set(state);else emit({type:'maintenance',message:state.message});}});
+  setup=new SetupController({runtime,installer,settings,save,emit,openBrowser:url=>shell.openExternal(url),discover:findBinary});
+  win=new BrowserWindow({width:1440,height:940,minWidth:960,minHeight:640,show:false,title:'MuseCode',icon:path.join(directory,'../build/icon.png'),backgroundColor:'#111214',frame:false,webPreferences:{preload:path.join(directory,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win.once('ready-to-show',()=>{if(process.env.MUSECODE_TEST_HIDDEN!=='1'){win.show();win.focus();}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',event=>event.preventDefault());
   if(process.env.MUSECODE_DEV_URL==='http://127.0.0.1:5173')await win.loadURL(process.env.MUSECODE_DEV_URL);else await win.loadFile(path.join(directory,'../dist/index.html'));
 });
-app.on('before-quit',event=>{if(!quitting){event.preventDefault();quitting=true;runtime.disconnect().finally(()=>app.quit());}});
+app.on('before-quit',event=>{if(!quitting){event.preventDefault();quitting=true;installer?.cancel();if(setup)setup.stopping=true;runtime.disconnect().finally(()=>app.quit());}});
 app.on('window-all-closed',()=>app.quit());
