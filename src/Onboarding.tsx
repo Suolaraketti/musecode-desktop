@@ -1,5 +1,6 @@
 import { ArrowRight, Check, Copy, FolderOpen, Globe, Loader2, Settings2, ShieldCheck, WandSparkles } from 'lucide-react';
 import type { SetupState } from './types';
+import { BrandMark } from './BrandMark';
 import './onboarding.css';
 type Props={state:SetupState;needsProject:boolean;onStart:()=>void;onCancel:()=>void;onBrowser:()=>void;onProject:()=>void;onSettings:()=>void;onPreview:()=>void};
 export function Onboarding({state,needsProject,onStart,onCancel,onBrowser,onProject,onSettings,onPreview}:Props){
@@ -8,7 +9,7 @@ export function Onboarding({state,needsProject,onStart,onCancel,onBrowser,onProj
   return <main className="onboarding" aria-label="Get started with MuseCode">
     <div className="onboarding-top"><span>YOUR IDEAS, WITH ROOM TO GROW</span><button onClick={onSettings}><Settings2 size={15}/>Settings</button></div>
     <section className="onboarding-card">
-      <div className="onboarding-symbol" aria-hidden="true"><span/><span/><span/><span/></div>
+      <BrandMark className="onboarding-symbol"/>
       <div className="onboarding-step">{needsProject?<><Check size={13}/>Account connected</>:<><span className="status-dot"/>A familiar home for Muse</>}</div>
       <h1>{needsProject?'Make yourself at home.':waiting?'A moment with Meta.':working?'Getting things ready.':'Big ideas start here.'}</h1>
       <p className="onboarding-description">{needsProject?'Choose the project you want to work on. Muse will meet you there.':waiting?'Finish signing in in your browser. We’ll bring you back to your workspace automatically.':working?state.message:'Sign in with your Meta account and start building. We’ll take care of getting everything ready.'}</p>

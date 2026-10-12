@@ -1,6 +1,6 @@
 # Alpha validation — October 12, 2026
 
-MuseCode 0.2.0 was validated on Windows x64 with Node.js 24.14.1, Electron 44.7.0 and Meta Muse Code SDK/runtime 1.4.6.
+MuseCode 0.2.1 was validated on Windows x64 with Node.js 24.14.1, Electron 44.7.0 and Meta Muse Code SDK/runtime 1.4.6.
 
 | Check | Result |
 | --- | --- |

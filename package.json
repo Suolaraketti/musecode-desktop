@@ -1,6 +1,6 @@
 {
   "name": "musecode-desktop",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": true,
   "type": "module",
   "description": "An open source desktop home for Meta Muse Code.",
@@ -35,14 +35,40 @@
     "vite": "8.3.4",
     "@playwright/test": "^1.58.0"
   },
-  "overrides": { "@electron/get": "5.1.0" },
+  "overrides": {
+    "@electron/get": "5.1.0"
+  },
   "build": {
     "appId": "community.musecode.desktop",
     "productName": "MuseCode",
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "build/icon.png", "LICENSE", "package.json"],
-    "win": { "target": ["nsis"], "icon": "build/icon.ico", "signExecutable": false },
-    "mac": { "target": ["dmg"], "category": "public.app-category.developer-tools" },
-    "linux": { "target": ["AppImage"], "category": "Development" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "build/icon.png",
+      "LICENSE",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "icon": "build/icon.ico",
+      "signExecutable": false
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Development"
+    }
   }
 }

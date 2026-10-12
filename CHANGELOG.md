@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.1 alpha — 2026-10-12
+
+- Align both themes with Muse's blue actions and neutral surfaces.
+- Replace the green tile emblem with an original handwritten M, including the native app and installer icons.
+- Use rounded primary buttons and Meta's typography stack with local system-font fallbacks.
+- Keep added/removed code colors distinct from the product's blue accent.
+
 ## 0.2.0 alpha — 2026-10-12
 
 - Replace executable-path setup with guided Meta sign-in and automatic Windows runtime preparation.

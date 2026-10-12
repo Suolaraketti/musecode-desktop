@@ -4,13 +4,15 @@ A comfortable, open source desktop home for Meta's Muse Code agent. An independe
 
 ![MuseCode first run](screenshots/onboarding.png)
 
+The interface follows [Muse's](https://muse.ai/) blue actions, neutral surfaces, rounded controls and typography conventions. Its handwritten M is an original SVG; Meta's logos and proprietary fonts are not redistributed. System fonts provide the default fallback. Regenerate the native icons with `python scripts/render-icons.py` when changing `build/icon.svg` (requires Pillow).
+
 MuseCode takes the approach used in the local Grok Build desktop app: put a GUI around the real agent runtime. It uses Meta's official `@muse-code/sdk` and `muse serve`, rather than reimplementing the coding loop or calling a model as a basic chatbot. The UI is newly written; no Grok source, branding, credentials, or agent binary is redistributed.
 
 ## Run the Windows build
 
-Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.2.0-alpha.1). It is an unsigned development alpha; live Muse/Wonder sessions still need validation.
+Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.2.1-alpha.1). It is an unsigned development alpha; live Muse/Wonder sessions still need validation.
 
-For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.2.0.exe`.
+For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.2.1.exe`.
 
 To run from source, install Node.js 22 or newer:
 

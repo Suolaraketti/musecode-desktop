@@ -7,12 +7,12 @@ import type { Approval, Bridge, Change, FileEntry, Item, Model, Question, Row, S
 import { demoSnapshot } from './demo';
 import { Onboarding } from './Onboarding';
 import { Settings } from './Settings';
+import { BrandMark as Mark } from './BrandMark';
 import './style.css';
 
 const bridge=window.muse;
 const basename=(value='')=>value.split(/[\\/]/).filter(Boolean).pop()||'Workspace';
 const title=(row:Row)=>row.name||row.title||row.firstUserPrompt?.slice(0,44)||'New conversation';
-function Mark({small=false}:{small?:boolean}) { return <span className={`mark ${small?'small':''}`} aria-hidden="true"><span/><span/><span/><span/></span>; }
 function Markdown({text}:{text:string}) { return <ReactMarkdown remarkPlugins={[remarkGfm]} components={{a:({href,children})=><a href={href} onClick={e=>{e.preventDefault();if(href)void bridge?.openLink(href);}}>{children}</a>}}>{text}</ReactMarkdown>; }
 
 function App(){

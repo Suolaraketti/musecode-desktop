@@ -1,2 +1,53 @@
-:root{color-scheme:dark;--bg:#131517;--side:#101214;--surface:#191c1f;--hover:#22262a;--selected:#24292b;--border:#282c30;--border-strong:#353a3f;--text:#e9ece9;--secondary:#c2c9c5;--muted:#818985;--accent:#b5cf9f;--accent-bright:#c8e0b4;--accent-dim:#5d7350;--accent-glow:#b5cf9f0c;--orange:#d1aa7d;--error:#e2a79e;--error-bg:#bf6a5c12}
-:root[data-theme=light]{color-scheme:light;--bg:#fcfcf9;--side:#f3f4ef;--surface:#ffffff;--hover:#e8ebe3;--selected:#e5e9dd;--border:#e0e3da;--border-strong:#c8cec0;--text:#20291c;--secondary:#48543f;--muted:#788170;--accent:#557344;--accent-bright:#678756;--accent-dim:#9ab58c;--accent-glow:#5573440c;--orange:#976c33;--error:#a34132;--error-bg:#a341320d}
+/* Palette follows Muse/Meta's current neutral surfaces and blue actions.
+   Primary controls and readable accent text use separate contrast levels. */
+:root {
+  color-scheme: dark;
+  --bg: #181818;
+  --side: #141414;
+  --surface: #232323;
+  --hover: #2d2d2d;
+  --selected: #242c38;
+  --border: #303030;
+  --border-strong: #414141;
+  --text: #f2f4f6;
+  --secondary: #d0d3d7;
+  --muted: #999da3;
+  --accent: #71adff;
+  --accent-bright: #8ebdff;
+  --accent-dim: #365a87;
+  --accent-glow: #0064e014;
+  --primary: #0064e0;
+  --primary-hover: #0874f1;
+  --on-primary: #ffffff;
+  --brand: #0878f9;
+  --orange: #e2b37d;
+  --success: #8bd5a5;
+  --success-bg: #42b96c14;
+  --error: #f0a6a6;
+  --error-bg: #df535314;
+  --font-ui: 'Optimistic AI VF', Optimistic, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+
+:root[data-theme=light] {
+  color-scheme: light;
+  --bg: #ffffff;
+  --side: #f7f7f7;
+  --surface: #f2f3f5;
+  --hover: #e7e9ed;
+  --selected: #eaf2ff;
+  --border: #e0e2e6;
+  --border-strong: #c6cbd1;
+  --text: #1c1e21;
+  --secondary: #41464d;
+  --muted: #656b73;
+  --accent: #0064e0;
+  --accent-bright: #075bc4;
+  --accent-dim: #8eb7f1;
+  --accent-glow: #0064e00d;
+  --brand: #0064e0;
+  --orange: #8a5d24;
+  --success: #217a40;
+  --success-bg: #42b96c14;
+  --error: #b13535;
+  --error-bg: #df53530e;
+}

@@ -77,7 +77,7 @@ app.whenReady().then(async()=>{
   settings.projects=[...projects];if(!projects.has(settings.lastProject))settings.lastProject='';
   installer=new RuntimeInstaller({directory:path.join(app.getPath('userData'),'runtime'),emit:state=>{if(setup?.state.phase==='preparing')setup.set(state);else emit({type:'maintenance',message:state.message});}});
   setup=new SetupController({runtime,installer,settings,save,emit,openBrowser:url=>shell.openExternal(url),discover:findBinary});
-  win=new BrowserWindow({width:1440,height:940,minWidth:960,minHeight:640,show:false,title:'MuseCode',icon:path.join(directory,'../build/icon.png'),backgroundColor:'#111214',frame:false,webPreferences:{preload:path.join(directory,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
+  win=new BrowserWindow({width:1440,height:940,minWidth:960,minHeight:640,show:false,title:'MuseCode',icon:path.join(directory,'../build/icon.png'),backgroundColor:'#181818',frame:false,webPreferences:{preload:path.join(directory,'preload.cjs'),contextIsolation:true,nodeIntegration:false,sandbox:true}});
   win.once('ready-to-show',()=>{if(process.env.MUSECODE_TEST_HIDDEN!=='1'){win.show();win.focus();}});
   win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.webContents.on('will-navigate',event=>event.preventDefault());

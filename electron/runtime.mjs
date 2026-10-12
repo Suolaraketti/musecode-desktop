@@ -12,7 +12,7 @@ export class MuseRuntime {
     let timer;
     try {
       this.host=await Promise.race([
-        handshake.initialize({clientInfo:{name:'musecode_desktop',title:'MuseCode',version:'0.2.0'},capabilities:{experimentalApi:true,requestedCapabilities:['userShell','sessionListStream'],userInputDialogs:true}}),
+        handshake.initialize({clientInfo:{name:'musecode_desktop',title:'MuseCode',version:'0.2.1'},capabilities:{experimentalApi:true,requestedCapabilities:['userShell','sessionListStream'],userInputDialogs:true}}),
         new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Muse did not answer within 20 seconds. Check the binary path and CLI version.')),20000);})
       ]);
     } catch(error) { await handshake.child.close().catch(()=>{}); throw error; }
