@@ -33,7 +33,12 @@ cli.on('line',line=>{
     },Number(process.env.MUSECODE_FIXTURE_DELAY)||250);return;
   }
   if(req.method==='account/loginCancel'){reply(req,{cancelled:true});write({method:'account/loginCompleted',params:{outcome:'cancelled'}});return;}
-  if(req.method==='session/start'){session.workspaceRoot=p.workspaceRoot;history=[];persist();event('session/started',{session});return reply(req,{session,viewCursor:''});}
+  if(req.method==='usage/read')return reply(req,{usage:{observedAtMs:Date.parse('2026-10-12T20:00:00Z'),tier:'fixture',window:{usedPercent:25,windowDurationMins:300,resetsAtMs:Date.parse('2026-10-13T01:00:00Z')},weekly:{usedPercent:18,resetsAtMs:Date.parse('2026-10-19T00:00:00Z')}}});
+  if(req.method==='session/start'){session.workspaceRoot=p.workspaceRoot;if(p.approvalMode)session.approvalMode={mode:p.approvalMode,source:'startup',lastCommandId:null};history=[];persist();event('session/started',{session});return reply(req,{session,viewCursor:''});}
+  if(req.method==='session/setApprovalMode'){
+    if(p.mode===process.env.MUSECODE_FIXTURE_DENY_APPROVAL_MODE)return write({id:req.id,error:{code:-32000,message:'Approval mode was rejected by the host.',data:{kind:'invalidParams'}}});
+    session.approvalMode={mode:p.mode,source:'approvalReconfigure',lastCommandId:p.commandId||null};persist();event('session/approvalModeChanged',{mode:p.mode,source:'approvalReconfigure',commandId:p.commandId||'',clientName:'musecode_desktop'});return reply(req,{commandId:p.commandId,status:'accepted',applyOutcome:'completed',effectiveMode:session.approvalMode});
+  }
   if(req.method==='session/resume')return reply(req,{session,viewCursor:'fixture:0',history:{mode:'inline',items:history.length?history:[item('old-message','agentMessage','completed','Restored history.')],snapshot:null}});
   if(req.method==='session/list')return reply(req,{sessions:[session],nextCursor:null});
   if(req.method==='model/list')return reply(req,{models:[{modelId:'fixture-model',displayLabel:'Fixture model',providerId:'muse',isActive:true,isDefault:true}],providerId:'muse',profileId:null,source:'fixture'});
@@ -56,6 +61,9 @@ cli.on('line',line=>{
     reply(req,{approvalId:p.approvalId,terminal:true});
     event('approval/resolved',{approvalId:p.approvalId,decision:p.choiceId==='deny'?'deny':'allow',resolvedBy:'user',policyResult:'allow',itemId:'tool-1',turnId:'test-turn',sourceRange:{},stageEvidence:[]});
     const answer=item('agent-1','agentMessage','completed','Authoritative final answer.',2);history.push(answer);persist();event('item/completed',{item:answer});
+    if(process.env.MUSECODE_FIXTURE_NOTICES){
+      for(const backgroundItem of [{...item('reminder-1','reminderChild','completed'),reminderAgentId:'test-reminder',generationId:1,fallbackText:'Reminder finished.'},{...item('background-1','subagent','completed'),label:'Background agent',finalSummary:'Background task finished.'},{...item('workflow-1','workflow','completed'),label:'Workflow',finalSummary:'Workflow finished.'}]){history.push(backgroundItem);event('item/completed',{item:backgroundItem});}persist();
+    }
     event('turn/completed',{turnId:'test-turn',outcome:{status:'completed'}});return;
   }
   if(req.method==='session/read')return reply(req,{session,receipt,history:{mode:'inline',items:[],snapshot:null},pendingRequests:[],viewCursor:`fixture:${cursor}`});

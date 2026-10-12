@@ -1,7 +1,29 @@
 import { spawnMspConnection, Session, readSessionDurability } from '@muse-code/sdk';
 
 const reads = new Set(['session/list','session/read','model/list','skill/list','hook/list','plugin/list','task/list','usage/read','approval/listPending','item/readOutput','view/page','account/read','account/loginStart','account/loginCancel','account/logout']);
-const commands = new Set(['session/start','session/resume','session/fork','session/rename','session/setModel','session/compact','turn/start','turn/cancel','approval/decide','userInput/answer','userInput/clarify','userInput/cancel','session/userShell']);
+const commands = new Set(['session/start','session/resume','session/fork','session/rename','session/setModel','session/setApprovalMode','session/compact','turn/start','turn/cancel','approval/decide','userInput/answer','userInput/clarify','userInput/cancel','session/userShell']);
+// Closed host vocabulary (MSP ApprovalMode): the GUI selects, never creates.
+export const APPROVAL_MODES = new Set(['allowAll','promptUnmatched','onRequest','denyUnmatched']);
+const num=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
+function usageWindow(value,id,label){
+  if(!value||typeof value!=='object'||Array.isArray(value))return null;
+  const percent=num(value.usedPercent),reset=num(value.resetsAtMs);
+  if(percent===null||percent<0)return null;
+  const date=reset===null?null:new Date(reset);
+  // Native percentages may exceed 100. Clamp only the visual meter, never the data.
+  return {id,label,used:null,limit:null,remaining:null,percent,...(date&&!Number.isNaN(date.getTime())?{resetsAt:date.toISOString()}: {})};
+}
+export function normalizeUsage(raw){
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return {supported:false,windows:[]};
+  // MSP UsageReadResult is {usage?: {observedAtMs, tier, window, weekly}}.
+  if(raw.usage===undefined)return {supported:true,windows:[],...(Object.keys(raw).length?{unrecognized:true}:{})};
+  const usage=raw.usage;
+  if(!usage||typeof usage!=='object'||Array.isArray(usage))return {supported:true,windows:[],unrecognized:true};
+  const minutes=num(usage.window?.windowDurationMins);
+  const label=minutes&&minutes>0?(minutes%60===0?`${minutes/60} hour`:`${minutes} minute`):'Current window';
+  const windows=[usageWindow(usage.window,'window',label),usageWindow(usage.weekly,'weekly','Weekly')].filter(Boolean);
+  return {supported:true,windows,...(!windows.length?{unrecognized:true}:{}),...(num(usage.observedAtMs)!==null?{observedAtMs:usage.observedAtMs}:{}),...(typeof usage.tier==='string'?{tier:usage.tier}:{})};
+}
 export class MuseRuntime {
   constructor(emit) { this.emit=emit; this.sessions=new Map(); this.rows=new Map(); this.history=new Map(); this.serial=0; }
   async connect(binary, cwd, args=['serve'], env=process.env) {
@@ -12,7 +34,7 @@ export class MuseRuntime {
     let timer;
     try {
       this.host=await Promise.race([
-        handshake.initialize({clientInfo:{name:'musecode_desktop',title:'MuseCode',version:'0.2.1'},capabilities:{experimentalApi:true,requestedCapabilities:['userShell','sessionListStream'],userInputDialogs:true}}),
+        handshake.initialize({clientInfo:{name:'musecode_desktop',title:'MuseCode',version:'0.3.0'},capabilities:{experimentalApi:true,requestedCapabilities:['userShell','sessionListStream'],userInputDialogs:true}}),
         new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error('Muse did not answer within 20 seconds. Check the binary path and CLI version.')),20000);})
       ]);
     } catch(error) { await handshake.child.close().catch(()=>{}); throw error; }
@@ -41,8 +63,14 @@ export class MuseRuntime {
     if(!this.requireHost().initializeResult.experimentalApi)throw updateRequired();
     try{return await this.request('account/read',{});}catch(error){if(error.kind==='methodNotFound')throw updateRequired();throw error;}
   }
+  async accountUsage() {
+    try{return normalizeUsage(await this.request('usage/read',{}));}
+    catch(error){if(error?.kind==='methodNotFound'||/method not found|unknown method|not supported|unsupported/i.test(error?.message||''))return {supported:false,windows:[]};throw error;}
+  }
   async command(method, params) {
     if(!commands.has(method)) throw new Error('Unsupported command.');
+    if(method==='session/setApprovalMode' && !APPROVAL_MODES.has(params?.mode)) throw new Error('Choose an approval mode Muse offers.');
+    if(method==='session/start' && params?.approvalMode!=null && !APPROVAL_MODES.has(params.approvalMode)) throw new Error('Choose an approval mode Muse offers.');
     // Let the SDK own UUIDv7 command IDs and retry identity. Do not retry user turns automatically.
     return this.requireHost().connection.command(method,params,{maxAttempts:1});
   }
@@ -65,6 +93,7 @@ export class MuseRuntime {
       if(frame.method==='turn/completed') this.rows.set(id,{...this.rows.get(id),status:'idle',activeTurnId:null});
       if(frame.method==='session/nameChanged') this.rows.set(id,{...this.rows.get(id),name:p.name});
       if(frame.method==='session/modelChanged') this.rows.set(id,{...this.rows.get(id),modelId:p.model?.modelId||p.modelId});
+      if(frame.method==='session/approvalModeChanged' && p.mode) this.rows.set(id,{...this.rows.get(id),approvalMode:{mode:p.mode,source:p.source||'approvalReconfigure',lastCommandId:p.commandId||null}});
       this.emit({type:'session',...this.snapshot(id)});
     }
     this.emit({type:'notification',...frame});

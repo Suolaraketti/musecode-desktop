@@ -2,7 +2,7 @@ import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readFile, writeFile, mkdir, realpath, stat, access } from 'node:fs/promises';
-import { MuseRuntime } from './runtime.mjs';
+import { MuseRuntime, normalizeUsage, APPROVAL_MODES } from './runtime.mjs';
 import * as workspace from './workspace.mjs';
 import { RuntimeInstaller, SetupController, resolveBinary } from './setup.mjs';
 const directory=path.dirname(fileURLToPath(import.meta.url));
@@ -10,7 +10,15 @@ if(process.env.MUSECODE_TEST_USER_DATA)app.setPath('userData',process.env.MUSECO
 const ownsInstance=app.requestSingleInstanceLock();
 if(!ownsInstance)app.exit(0);
 let win, setup, installer, settings={binary:'',projects:[],theme:'dark',autoConnect:true}, projects=new Set(), quitting=false;
-function emit(payload){if(win&&!win.isDestroyed())win.webContents.send('muse:event',payload);if(setup)void setup.notification(payload).catch(()=>{});}
+let usageCache={at:0,value:null,promise:null};
+function emit(payload){
+  if(['connected','disconnected'].includes(payload.type)||(payload.type==='notification'&&payload.method==='account/changed'))usageCache={at:0,value:null,promise:null};
+  if(payload.type==='notification'&&payload.method==='usage/changed'){
+    const value={...normalizeUsage({usage:payload.params}),fetchedAt:Date.now()};usageCache={at:Date.now(),value,promise:null};
+    if(win&&!win.isDestroyed())win.webContents.send('muse:event',{type:'accountUsage',usage:value});
+  }
+  if(win&&!win.isDestroyed())win.webContents.send('muse:event',payload);if(setup)void setup.notification(payload).catch(()=>{});
+}
 const runtime=new MuseRuntime(emit);
 // Test-owned host seam: never exposed through renderer IPC or persisted settings.
 if(process.env.MUSECODE_TEST_HOST){const connect=runtime.connect.bind(runtime);runtime.connect=()=>connect(process.execPath,path.dirname(process.env.MUSECODE_TEST_HOST),[process.env.MUSECODE_TEST_HOST],{...process.env,ELECTRON_RUN_AS_NODE:'1'});}
@@ -29,16 +37,18 @@ register('startSetup',()=>setup.start());
 register('cancelSetup',()=>setup.cancel());
 register('openSignIn',async()=>{if(!setup.state.verificationUrl)throw new Error('Start sign-in again to get a new link.');await shell.openExternal(setup.state.verificationUrl);});
 register('signOut',async()=>{if(runtime.host)await setup.acceptAccount(await runtime.request('account/logout',{}));});
+register('usage',async(force)=>{const cache=usageCache,now=Date.now();if(!force&&cache.value&&now-cache.at<60000)return cache.value;if(cache.promise)return cache.promise;cache.promise=(async()=>{let value;try{value={...(await runtime.accountUsage()),fetchedAt:Date.now()};}catch{value={supported:false,windows:[],fetchedAt:Date.now()};}if(usageCache!==cache)return usageCache.value||{supported:false,windows:[]};cache.at=Date.now();cache.value=value;cache.promise=null;return value;})();return cache.promise;});
 register('remember',async(view)=>{if(view.project)settings.lastProject=await known(view.project);if(typeof view.sessionId==='string')settings.lastSession=view.sessionId;if(typeof view.draft==='string'&&view.draft.length<=100000&&view.project){settings.drafts={...settings.drafts,[view.project]:view.draft};}await save();});
 register('pickProject',async()=>{
   const selection=await dialog.showOpenDialog(win,{title:'Open a project',properties:['openDirectory']});if(selection.canceled)return null;
   const root=await realpath(selection.filePaths[0]);projects.add(root);settings.projects=[root,...settings.projects.filter(p=>p!==root)].slice(0,20);settings.lastProject=root;settings.lastSession='';await save();return root;
 });
 register('pickBinary',async()=>{const r=await dialog.showOpenDialog(win,{title:'Select the native Muse Code binary',properties:['openFile'],filters:process.platform==='win32'?[{name:'Muse executable',extensions:['exe']}]:undefined});return r.canceled?null:r.filePaths[0];});
-register('saveSettings',async(next)=>{if(typeof next.binary==='string')settings.binary=next.binary;if(['dark','light'].includes(next.theme))settings.theme=next.theme;await save();return settings;});
+register('saveSettings',async(next)=>{if(typeof next.binary==='string')settings.binary=next.binary;if(['dark','light'].includes(next.theme))settings.theme=next.theme;if(next.approvalMode===''||APPROVAL_MODES.has(next.approvalMode))settings.approvalMode=next.approvalMode;await save();return settings;});
 register('connect',async()=>{if(settings.binary){try{if(!(await stat(settings.binary)).isFile())throw new Error();}catch{throw new Error('Muse Code could not be found at this path. Choose its native executable in Advanced settings.');}}await runtime.disconnect();setup.set({phase:'welcome',message:'Reconnecting your account…'});return setup.start();});
 register('disconnect',()=>setup.disconnect());
-register('newSession',async(root,modelId)=>runtime.acquire('session/start',{workspaceRoot:await known(root),...(modelId?{modelId}: {})}));
+register('newSession',async(root,modelId,approvalMode)=>{if(approvalMode!=null&&approvalMode!==''&&!APPROVAL_MODES.has(approvalMode))throw new Error('Choose an approval mode Muse offers.');return runtime.acquire('session/start',{workspaceRoot:await known(root),...(modelId?{modelId}: {}),...(APPROVAL_MODES.has(approvalMode)?{approvalMode}: {})});});
+register('setApprovalMode',(id,mode)=>{validateText(id,1000);if(!APPROVAL_MODES.has(mode))throw new Error('Choose an approval mode Muse offers.');return runtime.command('session/setApprovalMode',{sessionId:id,mode});});
 register('resumeSession',async(id)=>{validateText(id,1000);const row=await runtime.acquire('session/resume',{sessionId:id,history:'inline'});if(row.workspaceRoot){const root=await realpath(row.workspaceRoot);projects.add(root);settings.projects=[root,...settings.projects.filter(p=>p!==root)].slice(0,20);await save();}return row;});
 register('listSessions',async()=>runtime.request('session/list',{limit:100}));
 register('send',async(id,text,effort,ifBusy)=>{validateText(text);if(!['queue','steer'].includes(ifBusy))throw new Error('Invalid turn mode.');if(!['none','minimal','low','medium','high','xhigh','max','ultra'].includes(effort))throw new Error('Invalid effort.');return runtime.command('turn/start',{sessionId:id,input:[{type:'text',text}],reasoningEffort:effort,ifBusy});});

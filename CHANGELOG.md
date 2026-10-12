@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.0 alpha — 2026-10-12
+
+- Display live account usage windows and reset times in Settings and the status bar using Muse's native subscription response. Live percentages were confirmed by the maintainer.
+- Keep reminders and background-agent/workflow updates in a collapsed notice tray, with dismissal and 30-minute snooze.
+- Batch streamed updates and initially display the latest 80 messages, with earlier history available on demand.
+- Add native approval-mode selection for the current conversation and future ones. Save preferences after the host confirms a change; rejected changes preserve the previous preference.
+- Verify native usage, reminder routing, snooze expiry, approval refusal and workspace restoration in desktop acceptance tests.
+
 ## 0.2.1 alpha — 2026-10-12
 
 - Align both themes with Muse's blue actions and neutral surfaces.

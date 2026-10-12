@@ -10,9 +10,9 @@ MuseCode takes the approach used in the local Grok Build desktop app: put a GUI 
 
 ## Run the Windows build
 
-Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.2.1-alpha.1). It is an unsigned development alpha; live Muse/Wonder sessions still need validation.
+Download the Windows installer from the [alpha release](https://github.com/Suolaraketti/musecode-desktop/releases/tag/v0.3.0-alpha.1). It is an unsigned community alpha. Live account usage has been confirmed by the maintainer; broader live Muse/Wonder regression testing is still ongoing.
 
-For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.2.1.exe`.
+For a locally packaged build, open `release/win-unpacked/MuseCode.exe` and keep the other files in that directory next to it. `npm run dist` also generates `release/MuseCode Setup 0.3.0.exe`.
 
 To run from source, install Node.js 22 or newer:
 
@@ -60,17 +60,21 @@ Account status and browser sign-in use the host-owned experimental MSP `account/
 - Skills, plugins, hooks, and task inventories through the session protocol.
 - Native user-shell commands when the server grants `userShell`.
 - Context usage and agent plan inspection when the runtime emits them.
+- Account usage windows (such as rolling and weekly limits) in the status bar and Settings when the connected host provides them through `usage/read`; hidden when the host does not support it.
+- Reminders and background-agent completions collected in a collapsed, snoozable notice tray instead of the conversation transcript.
+- Approval mode selector in the composer (Host default, Ask on request, Ask if unmatched, Allow all, Deny if unmatched) using only Muse's native `session/setApprovalMode` modes; the choice applies to the current conversation and is saved for new ones. Changes apply to subsequent actions; already-pending approvals still need an explicit choice.
+- Smoother streaming through batched updates, with the latest 80 messages initially displayed and a Show earlier messages action for older history.
 - Dark/light themes, command palette, familiar window controls, offline interface preview.
 
 Native permissions and sandbox settings remain owned by Muse Code. No permissive launch flags are added. The GUI does not claim an approval policy different from the runtime's policy.
 
-## Remaining work before a public release
+## Known limitations and next work
 
-This is a working foundation, not yet full TUI parity or a production release. Fresh runtime installation and native initialization, account status, and browser-login start/cancel were validated with Muse 1.4.6. Completed account authorization and live Wonder coding still need testing with a user account. Automated desktop tests use a deterministic MSP host for completed login and coding interactions.
+This community alpha is a working foundation. The maintainer has confirmed the live account usage numbers. Fresh runtime installation, native initialization, account status, and browser-login start/cancel were independently validated with Muse 1.4.6. Automated desktop tests cover completed login, coding interactions, usage, notices and approval modes using a deterministic MSP host. Fresh-account authorization and a full live Wonder regression pass remain future validation work.
 
 | Surface | Current state | Next work |
 | --- | --- | --- |
-| Authentication | Automatic setup and native browser sign-in | Complete user-account authorization and live Wonder validation |
+| Authentication | Automatic setup and native browser sign-in | Broader fresh-account and live Wonder regression testing |
 | Models | Native catalog and session switch | Validate Wonder/Full entitlement and effort variants live |
 | Agent activity | Renders native items | Rich workflow timelines and subagent controls |
 | Files/Git | Read-only previews and diffs | Editor, staged review/commit flow, worktrees |

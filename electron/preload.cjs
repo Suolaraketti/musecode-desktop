@@ -1,5 +1,5 @@
 const { contextBridge, ipcRenderer } = require('electron');
-const calls = ['bootstrap', 'setupState', 'startSetup', 'cancelSetup', 'openSignIn', 'signOut', 'remember', 'pickProject', 'pickBinary', 'saveSettings', 'connect', 'disconnect', 'newSession', 'resumeSession', 'listSessions', 'send', 'cancel', 'models', 'setModel', 'rename', 'compact', 'fork', 'approve', 'answer', 'clarify', 'decline', 'inventory', 'shell', 'files', 'readFile', 'changes', 'diff', 'exportSession', 'openLink', 'window'];
+const calls = ['bootstrap', 'setupState', 'startSetup', 'cancelSetup', 'openSignIn', 'signOut', 'usage', 'remember', 'pickProject', 'pickBinary', 'saveSettings', 'connect', 'disconnect', 'newSession', 'resumeSession', 'listSessions', 'send', 'cancel', 'models', 'setModel', 'setApprovalMode', 'rename', 'compact', 'fork', 'approve', 'answer', 'clarify', 'decline', 'inventory', 'shell', 'files', 'readFile', 'changes', 'diff', 'exportSession', 'openLink', 'window'];
 contextBridge.exposeInMainWorld('muse', Object.fromEntries([
   ...calls.map(name => [name, (...args) => ipcRenderer.invoke(`muse:${name}`, ...args)]),
   ['onEvent', handler => {

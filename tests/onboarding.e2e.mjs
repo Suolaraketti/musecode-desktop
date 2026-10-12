@@ -7,10 +7,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 const root=fileURLToPath(new URL('..',import.meta.url));
-test('Sign-in, project selection, native approvals, drafts and automatic session restore',async()=>{
+test('Sign-in, usage, native notices, approvals, drafts and automatic session restore',async()=>{
   const temp=await mkdtemp(path.join(tmpdir(),'muse-onboarding-'));
   const profile=path.join(temp,'profile'),project=path.join(temp,'first project');await mkdir(profile);await mkdir(project);await writeFile(path.join(project,'hello.ts'),'export const hello="world";');execFileSync('git',['-C',project,'init'],{windowsHide:true});
-  const env={...process.env,MUSECODE_TEST_HIDDEN:'1',MUSECODE_TEST_USER_DATA:profile,MUSECODE_TEST_HOST:path.join(root,'tests','fixture-host.mjs'),MUSECODE_FIXTURE_AUTH:path.join(temp,'fixture-auth'),MUSECODE_FIXTURE_SESSION:path.join(temp,'fixture-session.json'),MUSECODE_FIXTURE_DELAY:'1500'};delete env.ELECTRON_RUN_AS_NODE;
+  const env={...process.env,MUSECODE_TEST_HIDDEN:'1',MUSECODE_TEST_USER_DATA:profile,MUSECODE_TEST_HOST:path.join(root,'tests','fixture-host.mjs'),MUSECODE_FIXTURE_AUTH:path.join(temp,'fixture-auth'),MUSECODE_FIXTURE_SESSION:path.join(temp,'fixture-session.json'),MUSECODE_FIXTURE_DELAY:'1500',MUSECODE_FIXTURE_NOTICES:'1',MUSECODE_FIXTURE_DENY_APPROVAL_MODE:'allowAll'};delete env.ELECTRON_RUN_AS_NODE;
   const options=process.env.MUSECODE_TEST_PACKAGED?{executablePath:process.env.MUSECODE_TEST_PACKAGED,args:[]}:{args:['.'],cwd:root};
   let app;
   const launch=async()=>{app=await electron.launch({...options,env,timeout:15000});await app.evaluate(({shell,dialog},project)=>{global.__museBrowserLinks=[];shell.openExternal=async url=>{global.__museBrowserLinks.push(url);};dialog.showOpenDialog=async()=>({canceled:false,filePaths:[project]});},project);return app.firstWindow();};
@@ -27,11 +27,37 @@ test('Sign-in, project selection, native approvals, drafts and automatic session
     assert.equal(await app.evaluate(({app})=>app.hasSingleInstanceLock()),true);
     await page.getByRole('button',{name:'Open a project',exact:true}).click();
     await page.getByRole('heading',{name:'What will you make?'}).waitFor();
+    await expect(page.locator('.statusbar')).toContainText('5h 25% · Week 18%');
+    await page.getByRole('button',{name:'Settings',exact:true}).click();
+    await expect(page.locator('.usage-card')).toContainText('25% used');
+    await expect(page.locator('.usage-card')).toContainText('18% used');
+    await expect(page.locator('.usage-card')).toContainText('As of');
+    await page.getByRole('button',{name:'Close settings'}).click();
+    await page.getByRole('combobox',{name:'Approval mode',exact:true}).selectOption('onRequest');
+    await expect.poll(async()=>JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).approvalMode).toBe('onRequest');
     await page.getByRole('textbox',{name:'Message MuseCode'}).fill('Make one small change.');
     await page.getByRole('button',{name:'Send message',exact:true}).click();
     await page.getByText('Muse needs your approval',{exact:true}).waitFor();
     await page.getByRole('button',{name:'Allow once',exact:true}).click();
     await page.getByText('Authoritative final answer.',{exact:true}).waitFor();
+    await page.getByRole('combobox',{name:'Approval mode',exact:true}).selectOption('promptUnmatched');
+    await expect.poll(async()=>JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).approvalMode).toBe('promptUnmatched');
+    await expect(page.locator('select[aria-label="Approval mode"] option[value=""]')).toBeDisabled();
+    await page.getByRole('combobox',{name:'Approval mode',exact:true}).selectOption('allowAll');
+    await expect(page.locator('.error-banner')).toContainText('Approval mode was rejected by the host');
+    await expect(page.getByRole('combobox',{name:'Approval mode',exact:true})).toHaveValue('promptUnmatched');
+    assert.equal(JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).approvalMode,'promptUnmatched');
+    await page.getByRole('button',{name:'Dismiss error'}).click();
+    await expect(page.locator('.messages article')).toHaveCount(2);
+    await page.locator('.signal-summary').click();
+    await expect(page.locator('.signal-row')).toHaveCount(3);
+    await page.getByRole('button',{name:'Dismiss Reminder test-reminder completed',exact:true}).click();
+    await expect(page.locator('.signal-row')).toHaveCount(2);
+    await page.clock.install();
+    await page.getByRole('button',{name:'Snooze Workflow completed for 30 minutes',exact:true}).click();
+    await expect(page.locator('.signal-row')).toHaveCount(1);
+    await page.clock.fastForward(30*60000);
+    await expect(page.locator('.signal-row')).toHaveCount(2);
     await page.getByRole('textbox',{name:'Message MuseCode'}).fill('Continue after restarting.');
     await expect.poll(async()=>JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).drafts?.[project]).toBe('Continue after restarting.');
     assert.equal(JSON.parse(await readFile(path.join(profile,'settings.json'),'utf8')).lastSession,'test-session');
@@ -39,6 +65,7 @@ test('Sign-in, project selection, native approvals, drafts and automatic session
     page=await launch();page.on('pageerror',e=>errors.push(e.message));
     await page.getByText('Authoritative final answer.',{exact:true}).waitFor();
     assert.equal(await page.getByRole('textbox',{name:'Message MuseCode'}).inputValue(),'Continue after restarting.');
+    await expect(page.getByRole('combobox',{name:'Approval mode',exact:true})).toHaveValue('promptUnmatched');
     assert.deepEqual(await app.evaluate(()=>global.__museBrowserLinks),[]);
     assert.deepEqual(errors,[]);
   }finally{if(app)await app.close();await rm(temp,{recursive:true,force:true});}
